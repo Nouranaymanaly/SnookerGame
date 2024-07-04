@@ -7,8 +7,9 @@ var cushions = [];
 var cue;
 var mode = 1; // default mode
 var initCueBall = false;
-var cueBall
-var halfPocket
+var cueBall;
+var halfPocket;
+var colouredBallCount;
 
 var Engine = Matter.Engine,
     World = Matter.World,
@@ -22,6 +23,15 @@ var pockets = [];
 
 var corners = [];
 
+var img;
+
+var collisionMessage = '';
+var messageTimer = 0;
+
+function preload() {
+  img  = loadImage('/Hand.png');
+} 
+
 function setup() {
   createCanvas(1200, 600); // maintain the 2:1 ratio
   initializeGame();
@@ -31,11 +41,27 @@ function draw() {
     background(102); 
     Engine.update(engine);
     
+    
     drawTable();
 
     isStriking();
 
     checkCollisions();
+
+    if (!initCueBall)
+      {
+        image(img, mouseX-17, mouseY-28 , 40, 40);
+
+      }
+          // Display collision message if the timer is active
+    if (messageTimer > 0) {
+      fill(255);
+      textSize(25);
+      textAlign(CENTER, CENTER);
+      text(collisionMessage, width / 2, height - 20);
+      messageTimer--;
+  }
+    
 }
 
 //initialization
@@ -71,6 +97,9 @@ function initializeGame()
 
     // Initialize balls, Frame, Cushions and cue, and add to world
     initialiseElements();
+
+    // Add collision event listener
+    Events.on(engine, 'collisionStart', handleCollision);
 
 }
 
@@ -127,10 +156,20 @@ function drawFrames() {
 
 class Ball {
     constructor(x, y, color) {
+      
+
       this.body = Bodies.circle(x, y, ballDiameter / 2, { restitution: 0.8, friction: 0.05, gravity:0});
       this.color = color;
       engine.world.gravity.y = 0;
       World.add(world, this.body);
+
+      if (color === "white") {
+        this.body.label = 'cue-ball';
+    } else if (color === "red") {
+      this.body.label = 'red-ball';
+    } else {
+      this.body.label = color + '-ball';
+    }
       
     }
   
@@ -364,14 +403,24 @@ function checkCollisions() {
       if (ball.color == "white") {
         // Cue ball falls in pocket
         resetCueBall();
-      } else if(ball.color == "red") {
+        colouredBallCount =0;
+      } 
+      else if(ball.color == "red") {
         // Red ball falls in pocket
         handleRedBallInPocket(ball);
+        colouredBallCount =0;
       }
       //handle coloured ball when falling in pocket
       else
       {
         resetColourBall(ball);
+        
+        if (colouredBallCount > 0) 
+        {
+          alert("Mistake: Two consecutive coloured balls have fallen into the pocket!");
+        }
+        colouredBallCount +=1;
+        
       }
     }
   }
@@ -440,3 +489,58 @@ function drawVertices(vertices) {
     }
     endShape(CLOSE);
 }
+
+function handleCollision(event) {
+  var pairs = event.pairs;
+
+  for (var i = 0; i < pairs.length; i++) {
+      var pair = pairs[i];
+      var bodyA = pair.bodyA;
+      var bodyB = pair.bodyB;
+
+      if (isCueBall(bodyA) || isCueBall(bodyB)) {
+          var cueBall = isCueBall(bodyA) ? bodyA : bodyB;
+          var otherBody = isCueBall(bodyA) ? bodyB : bodyA;
+
+          if (isRedBall(otherBody)) {
+            notifyUser('cue-red');
+          } else if (isColoredBall(otherBody)) {
+            notifyUser('cue-colour');
+          } else if (isCushion(otherBody)) {
+            notifyUser('cue-cushion');
+          }
+      }
+  }
+}
+
+function isCueBall(body) {
+  return body.label == 'cue-ball';
+}
+
+function isRedBall(body) {
+  return body.label === 'red-ball';
+}
+
+function isColoredBall(body) {
+  return body.label !== 'cue-ball' && body.label !== 'red-ball' && body.label !== 'cushion';
+}
+
+function isCushion(body) {
+  return body.label === 'cushion';
+}
+
+function notifyUser(type) {
+  switch (type) {
+      case 'cue-red':
+          collisionMessage = "Cue ball hit a red ball!";
+          break;
+      case 'cue-colour':
+          collisionMessage = "Cue ball hit a colored ball!";
+          break;
+      case 'cue-cushion':
+          collisionMessage = "Cue ball hit a cushion!";
+          break;
+  }
+  messageTimer = 120; // Display the message for 2 seconds (assuming 60 FPS)
+}
+
